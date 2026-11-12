@@ -95,27 +95,3 @@ services:
         exec tail -n+1 -F /var/log/era4s/all/*.log
     volumes:
       - ${ERA4S_DATA_DIR:-/opt/era4s/data}/log:/var/log/era4s:ro
-
-  redis:
-    image: redis:7.4-alpine
-    profiles: ["redis"]
-    restart: unless-stopped
-    command:
-      - redis-server
-      - --save
-      - ""
-      - --appendonly
-      - "no"
-      - --maxmemory
-      - ${REDIS_MAX_MEMORY:-128mb}
-      - --maxmemory-policy
-      - allkeys-lru
-    tmpfs:
-      - /data
-    expose:
-      - "6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
