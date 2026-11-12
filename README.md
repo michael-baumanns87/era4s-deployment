@@ -3,24 +3,34 @@
 This repository contains the Docker Compose stack used by Portainer to run
 [era4s](https://github.com/michael-baumanns87/era4s) on the NAS.
 
-The application repository remains independent of Portainer. Its CI pipeline
-builds and publishes the Docker image, then triggers this repository's
-GitHub Actions workflow. The workflow calls the Portainer GitOps webhook.
+The application repository remains independent of Portainer. Its GitLab CI
+pipeline builds, tests and publishes the Docker image, then triggers a pipeline
+in this repository. This repository's GitLab pipeline calls the Portainer
+GitOps webhook. Portainer-specific credentials stay here, not in `era4s`.
 
-## Portainer setup
+## GitLab and Portainer setup
 
-1. In Portainer, create a new **Standalone** stack using **Git repository**.
-2. Repository URL: `https://github.com/michael-baumanns87/era4s-deployment`
-3. Reference: `refs/heads/main`
-4. Compose path: `compose/docker-compose.yml`
-5. Configure the stack environment variables listed below.
-6. Enable **GitOps updates** and select **Webhook**.
-7. Enable **Re-pull image** and **Force redeployment**.
-8. Copy the generated GitOps webhook URL into the GitHub repository secret
-   `PORTAINER_GITOPS_WEBHOOK` (Settings → Secrets and variables → Actions).
+1. Import this repository into the NAS GitLab instance as
+   `era4s-deployment`. Use the NAS GitLab project URL as the canonical
+   repository from then on.
+2. In Portainer, create a new **Standalone** stack using **Git repository**.
+3. Set the repository URL to the NAS GitLab clone URL of this project.
+4. Reference: `refs/heads/main`.
+5. Compose path: `compose/docker-compose.yml`.
+6. Configure the stack environment variables listed below.
+7. Enable **GitOps updates** and select **Webhook**.
+8. Enable **Re-pull image** and **Force redeployment**.
+9. Copy the generated GitOps webhook URL into this GitLab project's CI/CD
+   variable `PORTAINER_GITOPS_WEBHOOK` (masked; protected if the deployment
+   branch is protected).
 
-The webhook URL is a secret. Do not commit it to this repository or expose it
-in CI logs.
+Create a **pipeline trigger token** in this deployment project. Store that
+token in the `era4s` GitLab project as the masked/protected CI/CD variable
+`ERA4S_DEPLOY_TRIGGER_TOKEN`. Also store the numeric deployment project ID
+as `ERA4S_DEPLOY_PROJECT_ID`. The application pipeline uses these values to
+trigger this project's `main` pipeline through the GitLab API.
+
+Do not commit webhook URLs or tokens, and do not print them in CI logs.
 
 ## Stack environment
 
@@ -49,20 +59,13 @@ bind-mount source paths on the host.
 
 ## Deployment flow
 
-1. The `era4s` CI pipeline builds, tests and pushes
+1. The `era4s` GitLab pipeline builds, tests and pushes
    `docker.io/michaelbaumanns/era4s:latest-amd64`.
-2. After a successful push, it sends a GitHub `repository_dispatch` event to
-   this repository (event type: `deploy`).
-3. The workflow calls the Portainer GitOps webhook.
+2. After a successful push, it triggers this project's GitLab pipeline using
+   `ERA4S_DEPLOY_PROJECT_ID` and `ERA4S_DEPLOY_TRIGGER_TOKEN`.
+3. This project's pipeline calls `PORTAINER_GITOPS_WEBHOOK`.
 4. Portainer checks out this repository, re-pulls the configured image and
    redeploys the stack.
 
-This keeps Portainer credentials and webhook details out of the application
-repository. The application pipeline only needs a GitHub token with permission
-to dispatch an event to this repository. Store it in the application CI as a
-masked variable; never put it in source control.
-
-## Local Compose
-
-This repository is only for the Portainer-managed NAS stack. The local Compose
-deployment in the `era4s` repository remains available and independent.
+The local Compose deployment in the `era4s` repository remains available and
+independent.
