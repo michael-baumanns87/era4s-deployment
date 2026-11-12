@@ -1,0 +1,18 @@
+stages:
+  - deploy
+
+deploy-portainer:
+  stage: deploy
+  image: curlimages/curl:8.12.1
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "trigger" || $CI_PIPELINE_SOURCE == "web"'
+  script:
+    - |
+      set -eu
+      if [ -z "${PORTAINER_GITOPS_WEBHOOK:-}" ]; then
+        echo "PORTAINER_GITOPS_WEBHOOK is not configured" >&2
+        exit 1
+      fi
+      curl --fail --silent --show-error \
+        --request POST \
+        "${PORTAINER_GITOPS_WEBHOOK}"
