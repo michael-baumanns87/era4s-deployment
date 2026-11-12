@@ -1,6 +1,9 @@
 stages:
   - deploy
 
+tags:
+  - linux
+
 deploy-portainer:
   stage: deploy
   image: curlimages/curl:8.12.1
