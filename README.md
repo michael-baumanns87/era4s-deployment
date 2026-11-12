@@ -33,14 +33,16 @@ Configure these variables in Portainer when creating the stack:
 | `APP_BIND_ADDRESS` | `0.0.0.0` | Host bind address |
 | `APP_IMAGE` | `docker.io/michaelbaumanns/era4s:latest-amd64` | Published application image |
 | `APP_VERSION` | `era4s:latest-amd64` | Version label passed to the application |
-| `ENABLE_REDIS` | `false` | Redis is optional; enable only if required |
-| `REDIS_MAX_MEMORY` | `128mb` | Redis memory limit when enabled |
 | `LOG_MAX_FILES` | `5d` | Application log retention |
 | `LOG_MAX_SIZE` | `1m` | Application log rotation size |
 
 Also configure the required era4s integration variables (SMAX and AI/Copilot
 credentials) in Portainer's stack environment. Do not store credentials in
 Git.
+
+Redis is intentionally not included in this NAS stack by default; era4s uses its
+file-cache fallback. This also avoids creating Redis volumes on NAS filesystems
+that may have Docker overlay/xattr limitations.
 
 The data directory must be an absolute path on the NAS because Docker resolves
 bind-mount source paths on the host.
