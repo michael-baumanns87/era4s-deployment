@@ -1,8 +1,10 @@
 stages:
   - deploy
 
-tags:
-  - linux
+default:
+    tags:
+        - linux
+
 
 deploy-portainer:
   stage: deploy
