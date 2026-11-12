@@ -1,0 +1,121 @@
+name: era4s
+
+services:
+  prepare-volumes:
+    image: busybox:1.36
+    user: "0:0"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mkdir -p /data/log/error /data/log/all /data/temp &&
+        chmod -R a+rwX /data/log /data/temp
+    volumes:
+      - ${ERA4S_DATA_DIR:-/opt/era4s/data}:/data
+    restart: "no"
+
+  app:
+    image: ${APP_IMAGE:-docker.io/michaelbaumanns/era4s:latest-amd64}
+    pull_policy: always
+    restart: unless-stopped
+    depends_on:
+      prepare-volumes:
+        condition: service_completed_successfully
+    ports:
+      - "${APP_BIND_ADDRESS:-0.0.0.0}:${APP_PORT:-8080}:8080"
+    expose:
+      - "8080"
+    environment:
+      OPENSSL_CONF: /dev/null
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
+      PORT: "8080"
+      FILE_CACHE_PATH: /tmp/era4s
+      COPILOT_DATA_DIR: /tmp/era4s/copilot-sessions
+      LOG_PATH: /var/log/era4s
+      LOG_MAX_FILES: ${LOG_MAX_FILES:-5d}
+      LOG_MAX_SIZE: ${LOG_MAX_SIZE:-1m}
+      LOG_ERRORS_FOLDER: error
+      LOG_COMBINED_FOLDER: all
+      APP_VERSION: ${APP_VERSION:-era4s:latest-amd64}
+      REDIS_URL: ${REDIS_URL:-}
+      smaxUrl: ${smaxUrl:-}
+      tenantId: ${tenantId:-}
+      user: ${user:-}
+      password: ${password:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      AI_COMPATIBLE_API_KEY: ${AI_COMPATIBLE_API_KEY:-}
+      COPILOT_CLIENT_ID: ${COPILOT_CLIENT_ID:-}
+      COPILOT_CLIENT_SECRET: ${COPILOT_CLIENT_SECRET:-}
+    volumes:
+      - ${ERA4S_DATA_DIR:-/opt/era4s/data}/temp:/tmp/era4s
+      - ${ERA4S_DATA_DIR:-/opt/era4s/data}/log:/var/log/era4s
+    deploy:
+      resources:
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+        limits:
+          memory: 2G
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/check').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5m
+
+  log-errors:
+    image: busybox:1.36
+    restart: unless-stopped
+    depends_on:
+      prepare-volumes:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until ls /var/log/era4s/error/*.log >/dev/null 2>&1; do sleep 2; done &&
+        exec tail -n+1 -F /var/log/era4s/error/*.log
+    volumes:
+      - ${ERA4S_DATA_DIR:-/opt/era4s/data}/log:/var/log/era4s:ro
+
+  log-all:
+    image: busybox:1.36
+    restart: unless-stopped
+    depends_on:
+      prepare-volumes:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        until ls /var/log/era4s/all/*.log >/dev/null 2>&1; do sleep 2; done &&
+        exec tail -n+1 -F /var/log/era4s/all/*.log
+    volumes:
+      - ${ERA4S_DATA_DIR:-/opt/era4s/data}/log:/var/log/era4s:ro
+
+  redis:
+    image: redis:7.4-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - ${REDIS_MAX_MEMORY:-128mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    tmpfs:
+      - /data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
