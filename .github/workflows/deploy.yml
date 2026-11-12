@@ -1,0 +1,26 @@
+name: Deploy era4s stack
+
+on:
+  repository_dispatch:
+    types: [deploy]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Portainer GitOps update
+        env:
+          PORTAINER_GITOPS_WEBHOOK: ${{ secrets.PORTAINER_GITOPS_WEBHOOK }}
+        run: |
+          set -eu
+          if [ -z "${PORTAINER_GITOPS_WEBHOOK:-}" ]; then
+            echo "PORTAINER_GITOPS_WEBHOOK secret is not configured" >&2
+            exit 1
+          fi
+          curl --fail --silent --show-error \
+            --request POST \
+            "$PORTAINER_GITOPS_WEBHOOK"
