@@ -3,10 +3,11 @@
 This repository contains the Docker Compose stack used by Portainer to run
 [era4s](https://github.com/michael-baumanns87/era4s) on the NAS.
 
-The application repository remains independent of Portainer. Its GitLab CI
-pipeline builds, tests and publishes the Docker image, then triggers a pipeline
-in this repository. This repository's GitLab pipeline calls the Portainer
-GitOps webhook. Portainer-specific credentials stay here, not in `era4s`.
+The application repository builds, tests and publishes an immutable image tag,
+then triggers this repository's GitLab pipeline with that exact image reference.
+This repository commits the new reference to the Compose file before calling
+the Portainer GitOps webhook. The image is the single source of truth for the
+deployed application version; no separate `APP_VERSION` variable is maintained.
 
 ## GitLab and Portainer setup
 
@@ -27,8 +28,15 @@ GitOps webhook. Portainer-specific credentials stay here, not in `era4s`.
 Create a **pipeline trigger token** in this deployment project. Store that
 token in the `era4s` GitLab project as the masked/protected CI/CD variable
 `ERA4S_DEPLOY_TRIGGER_TOKEN`. Also store the numeric deployment project ID
-as `ERA4S_DEPLOY_PROJECT_ID`. The application pipeline uses these values to
-trigger this project's `main` pipeline through the GitLab API.
+as `ERA4S_DEPLOY_PROJECT_ID`. The application pipeline passes only
+`APP_IMAGE` (the immutable image reference) as a trigger-pipeline variable.
+
+The deployment pipeline commits the Compose update using its `CI_JOB_TOKEN`.
+In the deployment project's GitLab settings, enable **Allow Git push requests
+to the repository** for CI job tokens. This is separate from the pipeline
+trigger token. The deployment pipeline only runs for `trigger` and `web`
+pipeline sources, so its own Git push does not recursively trigger another
+deployment.
 
 Do not commit webhook URLs or tokens, and do not print them in CI logs.
 
@@ -41,8 +49,6 @@ Configure these variables in Portainer when creating the stack:
 | `ERA4S_DATA_DIR` | `/volume1/docker/era4s-data` | Absolute persistent data path on the NAS; replace with a path that exists on your NAS |
 | `APP_PORT` | `8080` | Host port |
 | `APP_BIND_ADDRESS` | `0.0.0.0` | Host bind address |
-| `APP_IMAGE` | `docker.io/michaelbaumanns/era4s:latest-amd64` | Published application image |
-| `APP_VERSION` | `era4s:latest-amd64` | Version label passed to the application |
 | `LOG_MAX_FILES` | `5d` | Application log retention |
 | `LOG_MAX_SIZE` | `1m` | Application log rotation size |
 
@@ -59,13 +65,16 @@ bind-mount source paths on the host.
 
 ## Deployment flow
 
-1. The `era4s` GitLab pipeline builds, tests and pushes
-   `docker.io/michaelbaumanns/era4s:latest-amd64`.
-2. After a successful push, it triggers this project's GitLab pipeline using
-   `ERA4S_DEPLOY_PROJECT_ID` and `ERA4S_DEPLOY_TRIGGER_TOKEN`.
-3. This project's pipeline calls `PORTAINER_GITOPS_WEBHOOK`.
-4. Portainer checks out this repository, re-pulls the configured image and
-   redeploys the stack.
+1. The `era4s` pipeline builds and tests the image.
+2. Its deploy job pushes the image and exports the exact immutable registry
+   reference (including the commit-derived tag) as a dotenv artifact.
+3. The trigger job waits for that successful deploy job and starts this
+   project's pipeline with only `APP_IMAGE`.
+4. This pipeline commits the exact image reference to
+   `compose/docker-compose.yml`.
+5. Only after the commit succeeds, it calls `PORTAINER_GITOPS_WEBHOOK`.
+6. Portainer checks out the new repository commit, re-pulls the pinned image
+   and redeploys the stack. The running image supplies the application's
+   version metadata.
 
-The local Compose deployment in the `era4s` repository remains available and
-independent.
+The local Compose deployment in the `era4s` repository remains independent.
