@@ -14,7 +14,7 @@ services:
     restart: "no"
 
   app:
-    image: ${APP_IMAGE:-docker.io/michaelbaumanns/era4s:latest-amd64}
+    image: docker.io/michaelbaumanns/era4s:latest-amd64
     pull_policy: always
     restart: unless-stopped
     depends_on:
@@ -36,7 +36,6 @@ services:
       LOG_MAX_SIZE: ${LOG_MAX_SIZE:-1m}
       LOG_ERRORS_FOLDER: error
       LOG_COMBINED_FOLDER: all
-      APP_VERSION: ${APP_VERSION:-era4s:latest-amd64}
       REDIS_URL: ${REDIS_URL:-}
       smaxUrl: ${smaxUrl:-}
       tenantId: ${tenantId:-}
