@@ -13,29 +13,26 @@ update-image-and-deploy:
       set -eu
 
       : "${APP_IMAGE:?APP_IMAGE was not passed by the era4s pipeline}"
-      : "${APP_VERSION:?APP_VERSION was not passed by the era4s pipeline}"
       case "$APP_IMAGE" in
         docker.io/michaelbaumanns/era4s:*) ;;
         *) echo "Unexpected APP_IMAGE: $APP_IMAGE" >&2; exit 1 ;;
       esac
-      case "$APP_IMAGE$APP_VERSION" in
-        *[!A-Za-z0-9._:/-]*) echo "Invalid image tag/version characters" >&2; exit 1 ;;
+      case "$APP_IMAGE" in
+        *[!A-Za-z0-9._:/-]*) echo "Invalid image reference characters" >&2; exit 1 ;;
       esac
 
-      export APP_IMAGE APP_VERSION
+      export APP_IMAGE
       python3 - <<'PY'
       import os
       from pathlib import Path
 
       path = Path("compose/docker-compose.yml")
       text = path.read_text()
-      old_image = "    image: ${APP_IMAGE:-docker.io/michaelbaumanns/era4s:latest-amd64}"
+      old_image = "    image: docker.io/michaelbaumanns/era4s:latest-amd64"
       new_image = "    image: " + os.environ["APP_IMAGE"]
-      old_version = "      APP_VERSION: ${APP_VERSION:-era4s:latest-amd64}"
-      new_version = '      APP_VERSION: "' + os.environ["APP_VERSION"] + '"'
-      if text.count(old_image) != 1 or text.count(old_version) != 1:
-          raise SystemExit("Expected compose image/version placeholders exactly once; refusing unsafe update")
-      path.write_text(text.replace(old_image, new_image).replace(old_version, new_version))
+      if text.count(old_image) != 1:
+          raise SystemExit("Expected compose image placeholder exactly once; refusing unsafe update")
+      path.write_text(text.replace(old_image, new_image))
       PY
 
       git config user.name "era4s deployment bot"
@@ -45,7 +42,7 @@ update-image-and-deploy:
       if git diff --cached --quiet; then
         echo "Compose already references ${APP_IMAGE}; no commit needed."
       else
-        git commit -m "Deploy era4s image ${APP_VERSION}"
+        git commit -m "Deploy era4s image ${APP_IMAGE##*:}"
         git push origin "HEAD:${CI_COMMIT_REF_NAME}"
       fi
 
