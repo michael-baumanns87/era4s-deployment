@@ -6,7 +6,8 @@ This repository contains the Docker Compose stack used by Portainer to run
 The application repository builds, tests and publishes an immutable image tag,
 then triggers this repository's GitLab pipeline with that exact image reference.
 This repository commits the new reference to the Compose file before calling
-the Portainer GitOps webhook.
+the Portainer GitOps webhook. The image is the single source of truth for the
+deployed application version; no separate `APP_VERSION` variable is maintained.
 
 ## GitLab and Portainer setup
 
@@ -27,8 +28,8 @@ the Portainer GitOps webhook.
 Create a **pipeline trigger token** in this deployment project. Store that
 token in the `era4s` GitLab project as the masked/protected CI/CD variable
 `ERA4S_DEPLOY_TRIGGER_TOKEN`. Also store the numeric deployment project ID
-as `ERA4S_DEPLOY_PROJECT_ID`. The application pipeline passes `APP_IMAGE`
-and `APP_VERSION` as trigger-pipeline variables.
+as `ERA4S_DEPLOY_PROJECT_ID`. The application pipeline passes only
+`APP_IMAGE` (the immutable image reference) as a trigger-pipeline variable.
 
 The deployment pipeline commits the Compose update using its `CI_JOB_TOKEN`.
 In the deployment project's GitLab settings, enable **Allow Git push requests
@@ -48,8 +49,6 @@ Configure these variables in Portainer when creating the stack:
 | `ERA4S_DATA_DIR` | `/volume1/docker/era4s-data` | Absolute persistent data path on the NAS; replace with a path that exists on your NAS |
 | `APP_PORT` | `8080` | Host port |
 | `APP_BIND_ADDRESS` | `0.0.0.0` | Host bind address |
-| `APP_IMAGE` | Set by the pipeline in the Compose file | Immutable published application image |
-| `APP_VERSION` | Set by the pipeline in the Compose file | Version label passed to the application |
 | `LOG_MAX_FILES` | `5d` | Application log retention |
 | `LOG_MAX_SIZE` | `1m` | Application log rotation size |
 
@@ -70,11 +69,12 @@ bind-mount source paths on the host.
 2. Its deploy job pushes the image and exports the exact immutable registry
    reference (including the commit-derived tag) as a dotenv artifact.
 3. The trigger job waits for that successful deploy job and starts this
-   project's pipeline with `APP_IMAGE` and `APP_VERSION`.
+   project's pipeline with only `APP_IMAGE`.
 4. This pipeline commits the exact image reference to
    `compose/docker-compose.yml`.
 5. Only after the commit succeeds, it calls `PORTAINER_GITOPS_WEBHOOK`.
 6. Portainer checks out the new repository commit, re-pulls the pinned image
-   and redeploys the stack.
+   and redeploys the stack. The running image supplies the application's
+   version metadata.
 
 The local Compose deployment in the `era4s` repository remains independent.
