@@ -37,13 +37,30 @@ update-image-and-deploy:
 
       git config user.name "era4s deployment bot"
       git config user.email "era4s-deployment-bot@users.noreply.gitlab.com"
-      git remote set-url origin "${CI_REPOSITORY_URL}"
       git add compose/docker-compose.yml
       if git diff --cached --quiet; then
         echo "Compose already references ${APP_IMAGE}; no commit needed."
       else
         git commit -m "Deploy era4s image ${APP_IMAGE##*:}"
-        git push origin "HEAD:${CI_COMMIT_REF_NAME}"
+        : "${DEPLOY_PUSH_USERNAME:?Set DEPLOY_PUSH_USERNAME as a protected CI/CD variable}"
+        : "${DEPLOY_PUSH_TOKEN:?Set DEPLOY_PUSH_TOKEN as a masked protected CI/CD variable}"
+
+        # Keep credentials out of the remote URL and .git/config.
+        ASKPASS="$(mktemp)"
+        trap 'rm -f "$ASKPASS"' EXIT
+        cat > "$ASKPASS" <<'SH'
+      #!/bin/sh
+      case "$1" in
+        *Username*) printf '%s\n' "$DEPLOY_PUSH_USERNAME" ;;
+        *Password*) printf '%s\n' "$DEPLOY_PUSH_TOKEN" ;;
+        *) exit 1 ;;
+      esac
+      SH
+        chmod 700 "$ASKPASS"
+        export GIT_ASKPASS="$ASKPASS"
+        export GIT_TERMINAL_PROMPT=0
+        git remote set-url origin "https://${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+        git -c credential.helper= push origin "HEAD:${CI_COMMIT_REF_NAME}"
       fi
 
       if [ -z "${PORTAINER_GITOPS_WEBHOOK:-}" ]; then
